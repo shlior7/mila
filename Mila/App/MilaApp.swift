@@ -379,6 +379,9 @@ struct MilaApp: App {
     /// user shared — with a confirmation sheet. Publishes only on user
     /// actions (open / confirm / cancel), never at audio or timer cadence.
     @StateObject private var shareImporter: RecordingShareImporter
+    /// Folders shared with teammates through a synced drive directory.
+    /// Publishes only when a folder is linked or unlinked.
+    @StateObject private var sharedFolders: SharedFolderSync
     /// Mirrors the live transcript to `live/current.json` for external
     /// tools (mila-mcp). Not observed by any view; held as a StateObject
     /// purely so it survives SwiftUI re-inits like the other singletons.
@@ -1017,6 +1020,7 @@ struct MilaApp: App {
         _speakerIdentitySettings = StateObject(wrappedValue: speakerIdentity)
         _configImporter = StateObject(wrappedValue: configImporter)
         _shareImporter = StateObject(wrappedValue: shareImporter)
+        _sharedFolders = StateObject(wrappedValue: SharedFolderSync(store: store, importer: shareImporter))
         _liveSidecarWriter = StateObject(wrappedValue: sidecarWriter)
         let dictationController = DictationController(store: store,
                                                       transcription: svc,
@@ -1122,6 +1126,8 @@ struct MilaApp: App {
                 .task { await runFinalizeRegressionIfRequested() }
                 .task { recordingSummarizer.backfillIfNeeded() }
                 .task { voiceMemosImporter.start() }
+                .task { sharedFolders.start() }
+                .environmentObject(sharedFolders)
                 .environmentObject(recordingSummarizer)
                 .environmentObject(meetingDetectionSettings)
                 .environmentObject(voiceMemosSettings)
