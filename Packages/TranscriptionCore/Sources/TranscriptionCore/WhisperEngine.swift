@@ -233,6 +233,23 @@ public actor WhisperEngine {
                     audioCtx: Int32? = nil,
                     progress: (@Sendable (Float) -> Void)?,
                     isCancelled: (@Sendable () -> Bool)? = nil) throws -> [TranscriptSegment] {
+        try transcribe(samples: rawSamples, language: language, audioCtx: audioCtx,
+                       prompt: nil, progress: progress, isCancelled: isCancelled)
+    }
+
+    /// `prompt` becomes whisper's `initial_prompt`, CARRIED into every 30 s
+    /// window (`carry_initial_prompt`). Without the carry, the prompt only
+    /// conditions the first window: Mila's `no_context` clears history only
+    /// between calls, so within one long pass the decoded text rolls forward
+    /// and pushes the prompt out — a meeting's names would be spelled right
+    /// for 30 seconds. Carried, it shares the ~224-token prompt budget with
+    /// that rolling text, so callers keep it short (`VocabularyPrompt`).
+    public func transcribe(samples rawSamples: [Float],
+                    language: String,
+                    audioCtx: Int32? = nil,
+                    prompt: String?,
+                    progress: (@Sendable (Float) -> Void)?,
+                    isCancelled: (@Sendable () -> Bool)? = nil) throws -> [TranscriptSegment] {
         guard let ctx else {
             throw Error.modelLoadFailed("(no model loaded)")
         }
@@ -331,6 +348,13 @@ public actor WhisperEngine {
         defer { free(langCString) }
         params.language = UnsafePointer(langCString)
         params.detect_language = lang.detectLanguage
+
+        let promptCString = prompt.flatMap { $0.isEmpty ? nil : strdup($0) }
+        defer { free(promptCString) }
+        if let promptCString {
+            params.initial_prompt = UnsafePointer(promptCString)
+            params.carry_initial_prompt = true
+        }
 
         let result: Int32 = samples.withUnsafeBufferPointer { ptr in
             whisper_full(ctx, params, ptr.baseAddress, Int32(ptr.count))

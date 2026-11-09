@@ -192,6 +192,14 @@ final class TranscriptionService: ObservableObject {
     /// app explicitly wires the gate.
     var shouldAutoDropShortEmpty: ((_ duration: Double, _ transcript: String) -> Bool)?
 
+    /// The user's glossary (`VocabularyPrompt.glossaryDefaultsKey`). Wired by
+    /// `MilaApp`; empty by default so tests transcribe without a hint.
+    var vocabularyGlossary: () -> String = { "" }
+    /// The calendar event of the recording in progress, so its live
+    /// utterances get the same hint its batch pass will. Set and cleared by
+    /// `QuickActionsController`.
+    var liveCalendarEvent: CalendarEvent?
+
     private var queue: [Recording] = []
     private var worker: Task<Void, Never>?
     private var shutdownTask: Task<Void, Never>?
@@ -668,6 +676,8 @@ final class TranscriptionService: ObservableObject {
             let segs = try await engine.transcribe(samples: samples,
                                                    language: language,
                                                    audioCtx: audioCtx,
+                                                   prompt: VocabularyPrompt.make(glossary: vocabularyGlossary(),
+                                                                                 event: liveCalendarEvent),
                                                    progress: nil,
                                                    isCancelled: { [cancellation] in cancellation.isStopped })
             guard !cancellation.isStopped else { return .skipped }
@@ -1397,6 +1407,7 @@ final class TranscriptionService: ObservableObject {
                 // e2e short-clip case (en_numbers_and_dates 5.17s,
                 // 0.29 → 0.36 on ggml-tiny).
                 audioCtx: 0,
+                prompt: VocabularyPrompt.make(glossary: vocabularyGlossary(), event: working.calendarEvent),
                 progress: { [weak self, progressCoalescer] p in
                     // Cheap, lock-guarded, no allocation on the hot path.
                     // Only schedule a main-actor flush when one isn't already

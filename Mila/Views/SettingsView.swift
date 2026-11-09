@@ -887,6 +887,7 @@ private struct ModelsSettingsTab: View {
     @EnvironmentObject private var manager: ModelManager
     @EnvironmentObject private var transcription: TranscriptionService
     @EnvironmentObject private var remote: RemoteTranscriptionSettings
+    @AppStorage(VocabularyPrompt.glossaryDefaultsKey) private var vocabulary = ""
 
     var body: some View {
         ScrollView {
@@ -917,6 +918,7 @@ private struct ModelsSettingsTab: View {
                 switch remote.backend {
                 case .local:
                     localModelsSection
+                    vocabularySection
                 case .remote:
                     RemoteBackendSection(remote: remote)
                 }
@@ -928,11 +930,28 @@ private struct ModelsSettingsTab: View {
         }
     }
 
+    /// Feeds `VocabularyPrompt`: terms whisper should expect, on top of the
+    /// meeting's title and attendees when calendar naming is on.
+    private var vocabularySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Vocabulary")
+                .font(.headline)
+            Text("Names, products and jargon your meetings use, separated by commas — e.g. CDD, brain.yaml, Context Hub, Kyber. Mila hints them to the model so they're spelled right, especially English terms inside Hebrew speech. Keep it short: only the first ~240 characters are used, after the meeting's title and attendees.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("CDD, brain.yaml, Context Hub, Kyber", text: $vocabulary, axis: .vertical)
+                .lineLimit(2...4)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("models.vocabulary.field")
+        }
+    }
+
     private var localModelsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Whisper models")
                 .font(.headline)
-            Text("English dictation uses the OpenAI turbo model; Hebrew uses ivrit.ai. Both download automatically on first launch (~1.6 GB each). The optional ivrit.ai large model is higher accuracy but ~2× slower.")
+            Text("Hebrew uses ivrit.ai's large-v3 fine-tune (~2.9 GB) — the most accurate Hebrew model that runs on-device. English uses OpenAI's large-v3-turbo (~1.5 GB). Both download automatically on first launch.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

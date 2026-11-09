@@ -45,6 +45,18 @@ public protocol TranscribingEngine: Sendable {
                     audioCtx: Int32?,
                     progress: (@Sendable (Float) -> Void)?,
                     isCancelled: (@Sendable () -> Bool)?) async throws -> [TranscriptSegment]
+
+    /// `transcribe` with a vocabulary hint: names and terms the audio is
+    /// likely to contain (the meeting's title and attendees, the user's
+    /// glossary), so they are spelled right instead of guessed phonetically.
+    /// The default implementation ignores the hint — engines that can't use
+    /// one (stubs, the remote API path) need not implement it.
+    func transcribe(samples: [Float],
+                    language: String,
+                    audioCtx: Int32?,
+                    prompt: String?,
+                    progress: (@Sendable (Float) -> Void)?,
+                    isCancelled: (@Sendable () -> Bool)?) async throws -> [TranscriptSegment]
     func shutdown() async
 
     /// CoreML status after the most recent successful `loadIfNeeded`. The
@@ -68,6 +80,16 @@ public protocol TranscribingEngine: Sendable {
 }
 
 extension TranscribingEngine {
+    public func transcribe(samples: [Float],
+                           language: String,
+                           audioCtx: Int32?,
+                           prompt: String?,
+                           progress: (@Sendable (Float) -> Void)?,
+                           isCancelled: (@Sendable () -> Bool)?) async throws -> [TranscriptSegment] {
+        try await transcribe(samples: samples, language: language, audioCtx: audioCtx,
+                             progress: progress, isCancelled: isCancelled)
+    }
+
     public var coreMLStatus: CoreMLStatus {
         get async { .unavailable }
     }

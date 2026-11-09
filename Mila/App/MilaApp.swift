@@ -924,6 +924,9 @@ struct MilaApp: App {
         // all) is a hotkey misfire / silence clip — permanently drop it so it
         // never spams the list. Reads the live threshold each time so a
         // Settings change takes effect on the next recording without relaunch.
+        svc.vocabularyGlossary = {
+            UserDefaults.standard.string(forKey: VocabularyPrompt.glossaryDefaultsKey) ?? ""
+        }
         svc.shouldAutoDropShortEmpty = { [weak storage] duration, transcript in
             storage?.shouldAutoDrop(duration: duration, transcript: transcript) ?? false
         }

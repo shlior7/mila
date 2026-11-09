@@ -870,9 +870,11 @@ final class QuickActionsController: ObservableObject {
     private func prefillFromCalendar() {
         nextRecordingCalendarEvent = nil
         calendarPrefilledTitle = nil
+        transcription.liveCalendarEvent = nil
         guard meetingDetectionSettings?.calendarEnabled == true,
               let event = CalendarLookup.currentEvent() else { return }
         nextRecordingCalendarEvent = event
+        transcription.liveCalendarEvent = event
         let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if nextRecordingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !title.isEmpty {
             nextRecordingTitle = title
@@ -897,6 +899,7 @@ final class QuickActionsController: ObservableObject {
             }
             calendarPrefilledTitle = nil
             nextRecordingCalendarEvent = nil
+            transcription.liveCalendarEvent = nil
             // Nothing came up, so a Live AI session start queued for the
             // drain's release (`prepareLivePipeline`) is owed to no one.
             liveAISessionStartDeferred = false
