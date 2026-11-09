@@ -942,6 +942,7 @@ struct MilaApp: App {
         coordinator.obsidianExporter = obsidian
         actions.liveSidecarWriter = sidecarWriter
         let meetingSettings = MeetingDetectionSettings(managed: managedSettings)
+        actions.meetingDetectionSettings = meetingSettings
         let detector = MeetingDetector()
         let promptCoordinator = MeetingPromptCoordinator(
             detector: detector,

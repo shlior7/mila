@@ -253,6 +253,12 @@ struct Recording: Identifiable, Codable, Hashable {
     /// `StoredRecording`.
     var untranscribedSpans: [UntranscribedSpan]?
 
+    /// The calendar event this recording was made during — see
+    /// `CalendarEvent`. Nil (and omitted from recordings.json) when calendar
+    /// naming is off, access was not granted, or nothing was on the calendar.
+    /// Mirrored in MilaKit's `StoredRecording`; not carried in a `.milashare`.
+    var calendarEvent: CalendarEvent?
+
     /// Total seconds of audio missing from the transcript.
     var untranscribedSeconds: Double {
         (untranscribedSpans ?? []).reduce(0) { $0 + $1.duration }
@@ -365,7 +371,8 @@ struct Recording: Identifiable, Codable, Hashable {
          transcriptionDeferredAt: Date? = nil,
          retranscriptionPriorState: RetranscriptionPriorState? = nil,
          speakerNameSuggestions: [SpeakerNameSuggestion] = [],
-         untranscribedSpans: [UntranscribedSpan]? = nil) {
+         untranscribedSpans: [UntranscribedSpan]? = nil,
+         calendarEvent: CalendarEvent? = nil) {
         self.id = id
         self.title = title
         self.createdAt = createdAt
@@ -393,6 +400,7 @@ struct Recording: Identifiable, Codable, Hashable {
         self.retranscriptionPriorState = retranscriptionPriorState
         self.speakerNameSuggestions = speakerNameSuggestions
         self.untranscribedSpans = untranscribedSpans
+        self.calendarEvent = calendarEvent
     }
 
     var isTrashed: Bool { deletedAt != nil }
@@ -437,7 +445,7 @@ struct Recording: Identifiable, Codable, Hashable {
              summary, actionItems, voiceMemoUniqueID, voiceMemoFolderUUID,
              speakerNames, summaryLanguage, sharedBy, sharedAt, transcriptionDeferredAt,
              retranscriptionPriorState, speakerNameSuggestions,
-             untranscribedSpans
+             untranscribedSpans, calendarEvent
         // `fullText` deliberately excluded — lives in a sidecar .txt file.
         // Legacy records that had it inline are decoded via the custom init.
         case fullText
@@ -484,6 +492,9 @@ struct Recording: Identifiable, Codable, Hashable {
         let spans = try? c.decodeIfPresent([UntranscribedSpan].self, forKey: .untranscribedSpans)
         let validSpans = (spans ?? []).filter(\.isValid)
         self.untranscribedSpans = validSpans.isEmpty ? nil : validSpans
+        // `try?` for the same all-or-nothing reason: losing this costs only
+        // the attendee list, never the library.
+        self.calendarEvent = try? c.decodeIfPresent(CalendarEvent.self, forKey: .calendarEvent)
         // Legacy records still have fullText inline; new records leave it
         // empty here and RecordingStore loads it from the sidecar .txt.
         self.fullText = try c.decodeIfPresent(String.self, forKey: .fullText) ?? ""
@@ -530,6 +541,7 @@ struct Recording: Identifiable, Codable, Hashable {
         if !validSpans.isEmpty {
             try c.encode(validSpans, forKey: .untranscribedSpans)
         }
+        try c.encodeIfPresent(calendarEvent, forKey: .calendarEvent)
         // fullText intentionally omitted — sidecar .txt is the source of truth.
     }
 

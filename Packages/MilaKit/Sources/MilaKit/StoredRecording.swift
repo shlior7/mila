@@ -160,6 +160,48 @@ public struct StoredRecording: Codable, Identifiable, Sendable {
         }
     }
 
+    /// Mirror of the app's `CalendarEvent`: the calendar event the
+    /// recording was made during, when calendar naming is on. Who was
+    /// INVITED — distinct from `speakerNames`, which is who was heard.
+    public struct CalendarEvent: Codable, Equatable, Sendable {
+        public struct Attendee: Codable, Equatable, Sendable {
+            public var name: String?
+            public var email: String?
+
+            public init(name: String? = nil, email: String? = nil) {
+                self.name = name
+                self.email = email
+            }
+        }
+
+        public var title: String
+        public var start: Date
+        public var end: Date
+        public var attendees: [Attendee]
+        /// Shared by every occurrence of a recurring event; nil for one-offs.
+        public var seriesID: String?
+
+        public init(title: String, start: Date, end: Date,
+                    attendees: [Attendee] = [], seriesID: String? = nil) {
+            self.title = title
+            self.start = start
+            self.end = end
+            self.attendees = attendees
+            self.seriesID = seriesID
+        }
+
+        private enum CodingKeys: String, CodingKey { case title, start, end, attendees, seriesID }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+            start = try c.decodeIfPresent(Date.self, forKey: .start) ?? .distantPast
+            end = try c.decodeIfPresent(Date.self, forKey: .end) ?? .distantPast
+            attendees = (try? c.decodeIfPresent([Attendee].self, forKey: .attendees)) ?? []
+            seriesID = try c.decodeIfPresent(String.self, forKey: .seriesID)
+        }
+    }
+
     public var id: UUID
     public var title: String
     public var createdAt: Date
@@ -213,6 +255,8 @@ public struct StoredRecording: Codable, Identifiable, Sendable {
     /// See `UntranscribedSpan`. Nil when the transcript covers the whole
     /// recording (the app omits the key then).
     public var untranscribedSpans: [UntranscribedSpan]?
+    /// See `CalendarEvent`. Nil when the app recorded no calendar event.
+    public var calendarEvent: CalendarEvent?
     /// Inline transcript on legacy records only; current records keep the
     /// text in the `.txt` sidecar and omit this key.
     public var legacyFullText: String?
@@ -270,7 +314,7 @@ public struct StoredRecording: Codable, Identifiable, Sendable {
              status, language, modelName, segments, deletedAt, folder, appName,
              summary, actionItems, speakerNames, appBundleID, summaryLanguage,
              sharedBy, sharedAt, transcriptionDeferredAt, retranscriptionPriorState,
-             untranscribedSpans
+             untranscribedSpans, calendarEvent
         case legacyFullText = "fullText"
     }
 
@@ -303,6 +347,7 @@ public struct StoredRecording: Codable, Identifiable, Sendable {
                                                            forKey: .retranscriptionPriorState)
         untranscribedSpans = try? c.decodeIfPresent([UntranscribedSpan].self,
                                                     forKey: .untranscribedSpans)
+        calendarEvent = try? c.decodeIfPresent(CalendarEvent.self, forKey: .calendarEvent)
         legacyFullText = try c.decodeIfPresent(String.self, forKey: .legacyFullText)
     }
 
@@ -317,6 +362,7 @@ public struct StoredRecording: Codable, Identifiable, Sendable {
                 transcriptionDeferredAt: Date? = nil,
                 retranscriptionPriorState: RetranscriptionPriorState? = nil,
                 untranscribedSpans: [UntranscribedSpan]? = nil,
+                calendarEvent: CalendarEvent? = nil,
                 legacyFullText: String? = nil) {
         self.id = id
         self.title = title
@@ -341,6 +387,7 @@ public struct StoredRecording: Codable, Identifiable, Sendable {
         self.transcriptionDeferredAt = transcriptionDeferredAt
         self.retranscriptionPriorState = retranscriptionPriorState
         self.untranscribedSpans = untranscribedSpans
+        self.calendarEvent = calendarEvent
         self.legacyFullText = legacyFullText
     }
 }

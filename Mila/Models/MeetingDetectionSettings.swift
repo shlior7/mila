@@ -33,6 +33,14 @@ final class MeetingDetectionSettings: ObservableObject {
             defaults.set(newValue, forKey: Keys.enabled)
         }
     }
+    /// Name each recording after the calendar event it was made during and
+    /// keep the event's attendees on the row (`CalendarEvent`). OFF by
+    /// default: turning it on asks for calendar access, which should be the
+    /// user's choice, not a launch-time prompt.
+    @Published var calendarEnabled: Bool {
+        didSet { defaults.set(calendarEnabled, forKey: Keys.calendarEnabled) }
+    }
+
     @Published private(set) var disabledBundleIDs: Set<String> {
         didSet {
             let joined = disabledBundleIDs.sorted().joined(separator: ",")
@@ -59,6 +67,7 @@ final class MeetingDetectionSettings: ObservableObject {
             defaults.set(true, forKey: Keys.enabled)
         }
         self.storedEnabled = managed.meetingDetectionEnabled ?? defaults.bool(forKey: Keys.enabled)
+        self.calendarEnabled = defaults.bool(forKey: Keys.calendarEnabled)
         let raw = defaults.string(forKey: Keys.disabledBundleIDs) ?? ""
         self.disabledBundleIDs = Set(
             raw.split(separator: ",").map(String.init).filter { !$0.isEmpty }
@@ -90,5 +99,6 @@ final class MeetingDetectionSettings: ObservableObject {
     private enum Keys {
         static let enabled = "meetingDetection.enabled"
         static let disabledBundleIDs = "meetingDetection.disabledBundleIDs"
+        static let calendarEnabled = "meetingDetection.calendarEnabled"
     }
 }

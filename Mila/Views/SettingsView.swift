@@ -3160,6 +3160,7 @@ private struct VoiceRecognitionSection: View {
 /// hunting through UserDefaults.
 private struct MeetingsSettingsTab: View {
     @EnvironmentObject private var settings: MeetingDetectionSettings
+    @State private var calendarAccessDenied = false
 
     var body: some View {
         ScrollView {
@@ -3184,6 +3185,8 @@ private struct MeetingsSettingsTab: View {
                     ManagedSettingNote(field: .meetingDetectionEnabled)
                 }
 
+                calendarToggle
+
                 Divider()
 
                 supportedAppsBlock
@@ -3203,6 +3206,41 @@ private struct MeetingsSettingsTab: View {
             Text("Auto-prompt when Mila notices you're in a call so you don't have to remember to start recording.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Turning this on asks for calendar access first; a refusal leaves it
+    /// off and says where to change that, since macOS won't ask twice.
+    @ViewBuilder
+    private var calendarToggle: some View {
+        Toggle(isOn: Binding(
+            get: { settings.calendarEnabled },
+            set: { on in
+                guard on else { settings.calendarEnabled = false; return }
+                Task { @MainActor in
+                    let granted = await CalendarLookup.requestAccess()
+                    settings.calendarEnabled = granted
+                    calendarAccessDenied = !granted
+                }
+            }
+        )) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Name recordings from your calendar")
+                    .font(.body)
+                Text("When you start recording during a calendar event, Mila uses the event's title and saves who was invited with the recording. Read on this Mac only.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
+        .controlSize(.regular)
+        .accessibilityIdentifier("meetings.calendar.toggle")
+        if calendarAccessDenied {
+            Text("Mila doesn't have calendar access. Allow it in System Settings ▸ Privacy & Security ▸ Calendars, then turn this on again.")
+                .font(.caption)
+                .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

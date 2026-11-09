@@ -105,6 +105,14 @@ final class QuickActionsController: ObservableObject {
     /// silently carries into the next one.
     @Published var nextRecordingTitle: String = ""
 
+    /// The calendar event the recording being started belongs to, looked up
+    /// in `beginStarting` and saved on the row in `stopRecording`. One-shot
+    /// like `nextRecordingTitle`.
+    private var nextRecordingCalendarEvent: CalendarEvent?
+    /// The title `beginStarting` filled in from the calendar, so a start that
+    /// fails can take it back out without clearing a name the user typed.
+    private var calendarPrefilledTitle: String?
+
     /// Populated when a recording was force-stopped because the Mac went
     /// to sleep (lid close on battery, low-battery sleep, etc.). Surfaced
     /// to ContentView as an alert on the next wake so the user knows why
@@ -189,6 +197,8 @@ final class QuickActionsController: ObservableObject {
     /// dictation-only setup working without these dependencies.
     var llmSettings: LLMSettings?
     var liveAISettings: LiveAISettings?
+    /// Set after init by MilaApp. Read for `calendarEnabled` only.
+    var meetingDetectionSettings: MeetingDetectionSettings?
     var liveAISession: LiveAISession?
     /// Set after init by MilaApp. When non-nil and the recording
     /// produced live segments, `stopRecording` saves the live
@@ -848,7 +858,26 @@ final class QuickActionsController: ObservableObject {
         pendingStartAbandonReason = nil
         startCancellation = CaptureStartCancellation()
         activeJob = .starting(source)
+        prefillFromCalendar()
         return true
+    }
+
+    /// Name the recording after the calendar event it starts during, the way
+    /// a meeting note is named after the invite. Only fills an empty title:
+    /// a name the user typed always wins. The prefill shows in the live
+    /// screen's title field, where it can still be edited, and it counts as
+    /// user-provided at Stop, so the LLM auto-title leaves it alone.
+    private func prefillFromCalendar() {
+        nextRecordingCalendarEvent = nil
+        calendarPrefilledTitle = nil
+        guard meetingDetectionSettings?.calendarEnabled == true,
+              let event = CalendarLookup.currentEvent() else { return }
+        nextRecordingCalendarEvent = event
+        let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if nextRecordingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !title.isEmpty {
+            nextRecordingTitle = title
+            calendarPrefilledTitle = title
+        }
     }
 
     /// Undo `beginStarting()` on a failure exit (permission denied, bring-up
@@ -862,6 +891,12 @@ final class QuickActionsController: ObservableObject {
         startCancellation = nil
         if case .starting = activeJob {
             activeJob = .none
+            // The calendar prefill was for a recording that never came up.
+            if let prefilled = calendarPrefilledTitle, nextRecordingTitle == prefilled {
+                nextRecordingTitle = ""
+            }
+            calendarPrefilledTitle = nil
+            nextRecordingCalendarEvent = nil
             // Nothing came up, so a Live AI session start queued for the
             // drain's release (`prepareLivePipeline`) is owed to no one.
             liveAISessionStartDeferred = false
@@ -1168,6 +1203,8 @@ final class QuickActionsController: ObservableObject {
             // must not leave title/folder selected for the next recording.
             nextRecordingTitle = ""
             nextRecordingFolder = nil
+            nextRecordingCalendarEvent = nil
+            calendarPrefilledTitle = nil
             guard ownsLivePipeline else {
                 // Nothing of the live pipeline is ours to tear down.
                 activeJob = .none
@@ -1246,8 +1283,11 @@ final class QuickActionsController: ObservableObject {
         // Same one-shot rule as the title: capture, apply, then clear so
         // the next recording in this launch does not inherit the folder.
         let chosenFolder = nextRecordingFolder
+        let calendarEvent = nextRecordingCalendarEvent
         nextRecordingTitle = ""
         nextRecordingFolder = nil
+        nextRecordingCalendarEvent = nil
+        calendarPrefilledTitle = nil
 
         // A mic-only recording that captured zero frames produces an empty
         // WAV → empty transcript → silent ".failed". Tell the user why
@@ -1323,7 +1363,8 @@ final class QuickActionsController: ObservableObject {
             appName: appName,
             appBundleID: appBundleID,
             summary: initialSummary.isEmpty ? nil : initialSummary,
-            actionItems: initialItems.isEmpty ? nil : initialItems
+            actionItems: initialItems.isEmpty ? nil : initialItems,
+            calendarEvent: calendarEvent
         )
         store.add(recording)
         // The live sidecar is deliberately NOT closed here. `finish()`
