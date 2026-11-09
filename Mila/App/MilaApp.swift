@@ -2459,6 +2459,9 @@ final class MilaAppDelegate: NSObject, NSApplicationDelegate {
     weak var shareImporter: RecordingShareImporter?
 
     private var didShutDown = false
+    /// `gracefulShutdown` has returned: everything that holds Metal memory
+    /// is freed, so exiting is safe.
+    private var shutdownFinished = false
     private var screenLockObserversInstalled = false
     /// `.milaconfig` / `.milashare` URLs delivered by a cold launch
     /// (double-click while Mila was not running) before `wireDelegate()`
@@ -2519,10 +2522,18 @@ final class MilaAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if didShutDown { return .terminateNow }
+        if shutdownFinished { return .terminateNow }
+        // A second Quit while `gracefulShutdown` is still waiting — on a
+        // multi-GB model load it can take seconds, so ⌘Q again or a script's
+        // repeated `quit` is likely. Answering `.terminateNow` here exited
+        // with that load still holding Metal resources, and ggml aborted in
+        // `ggml_metal_rsets_free` (Mila-2026-11-09-144438.ips). Refuse this
+        // one; the first request's reply below ends the app.
+        if didShutDown { return .terminateCancel }
         didShutDown = true
         Task { @MainActor [weak self] in
             await self?.gracefulShutdown()
+            self?.shutdownFinished = true
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
