@@ -35,6 +35,7 @@ extension UTType {
 struct SidebarView: View {
     @Binding var selection: SidebarSelection?
     @EnvironmentObject private var store: RecordingStore
+    @EnvironmentObject private var sharedFolders: SharedFolderSync
 
     @State private var showingNewFolderSheet = false
     @State private var newFolderName = ""
@@ -93,7 +94,7 @@ struct SidebarView: View {
 
                 ForEach(store.folders, id: \.self) { name in
                     folderRow(label: name,
-                              systemImage: "folder",
+                              systemImage: sharedFolders.isShared(name) ? "person.2.fill" : "folder",
                               selection: .folder(name),
                               identifier: "sidebar.folder.\(name)") { payload in
                         if let id = payload?.id,
@@ -107,7 +108,18 @@ struct SidebarView: View {
                             renameError = nil
                             renameTarget = name
                         }
+                        Divider()
+                        if let dir = sharedFolders.directory(for: name) {
+                            Button("Show Shared Folder in Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([dir])
+                            }
+                            Button("Stop Sharing") { sharedFolders.unlink(name) }
+                        } else {
+                            Button("Share with Team…") { chooseSharedDirectory(for: name) }
+                        }
+                        Divider()
                         Button("Delete Folder", role: .destructive) {
+                            sharedFolders.unlink(name)
                             store.deleteFolder(name)
                             if case .folder(let sel) = selection, sel == name {
                                 selection = .defaultFolder
@@ -182,6 +194,7 @@ struct SidebarView: View {
                         renameError = "A folder with that name already exists."
                         return
                     }
+                    sharedFolders.folderRenamed(from: target.name, to: renamed)
                     if case .folder(let sel) = selection, sel == target.name {
                         selection = .folder(renamed)
                     }
@@ -190,6 +203,24 @@ struct SidebarView: View {
                 onCancel: { renameTarget = nil }
             )
         }
+    }
+}
+
+extension SidebarView {
+    /// Pick the directory teammates sync — typically a Google Drive shared
+    /// drive under ~/Library/CloudStorage — and link the folder to it.
+    func chooseSharedDirectory(for folder: String) {
+        let panel = NSOpenPanel()
+        panel.title = "Share “\(folder)” with Team"
+        panel.message = "Choose a folder your teammates also sync — for example a Google Drive shared drive. Mila keeps your recordings in it and imports theirs."
+        panel.prompt = "Share"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/CloudStorage", isDirectory: true)
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        sharedFolders.link(folder, to: dir)
     }
 }
 

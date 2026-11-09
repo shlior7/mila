@@ -241,7 +241,10 @@ final class ShareManifestTests: XCTestCase {
                                       evidence: "hi there, John here", origin: .transcript),
             ],
             // Local repair bookkeeping; set so the key-set test sees the key.
-            untranscribedSpans: [UntranscribedSpan(start: 12, end: 15.5)])
+            untranscribedSpans: [UntranscribedSpan(start: 12, end: 15.5)],
+            // The sender's calendar; set so the key-set test sees the key.
+            calendarEvent: CalendarEvent(title: "Weekly sync", start: created, end: created,
+                                         attendees: [.init(name: "Ada", email: "ada@example.com")]))
     }
 
     func test_payload_strips_machine_specific_fields_and_keeps_content() throws {
@@ -340,6 +343,9 @@ final class ShareManifestTests: XCTestCase {
             // confirmed names (`speakerNames`); a pending guess arriving on
             // the receiver's side would read as the sender's decision.
             "speakerNameSuggestions",
+            // The sender's calendar event: invitees' emails come from the
+            // sender's calendar, which sharing a recording doesn't consent to.
+            "calendarEvent",
             // Which spans of the SENDER's audio its transcript is missing
             // (#355) — bookkeeping for the sender's own "Retry missing parts".
             // The receiver imports the transcript as sent; a full

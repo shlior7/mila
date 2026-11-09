@@ -379,6 +379,9 @@ struct MilaApp: App {
     /// user shared — with a confirmation sheet. Publishes only on user
     /// actions (open / confirm / cancel), never at audio or timer cadence.
     @StateObject private var shareImporter: RecordingShareImporter
+    /// Folders shared with teammates through a synced drive directory.
+    /// Publishes only when a folder is linked or unlinked.
+    @StateObject private var sharedFolders: SharedFolderSync
     /// Mirrors the live transcript to `live/current.json` for external
     /// tools (mila-mcp). Not observed by any view; held as a StateObject
     /// purely so it survives SwiftUI re-inits like the other singletons.
@@ -942,6 +945,7 @@ struct MilaApp: App {
         coordinator.obsidianExporter = obsidian
         actions.liveSidecarWriter = sidecarWriter
         let meetingSettings = MeetingDetectionSettings(managed: managedSettings)
+        actions.meetingDetectionSettings = meetingSettings
         let detector = MeetingDetector()
         let promptCoordinator = MeetingPromptCoordinator(
             detector: detector,
@@ -1016,6 +1020,7 @@ struct MilaApp: App {
         _speakerIdentitySettings = StateObject(wrappedValue: speakerIdentity)
         _configImporter = StateObject(wrappedValue: configImporter)
         _shareImporter = StateObject(wrappedValue: shareImporter)
+        _sharedFolders = StateObject(wrappedValue: SharedFolderSync(store: store, importer: shareImporter))
         _liveSidecarWriter = StateObject(wrappedValue: sidecarWriter)
         let dictationController = DictationController(store: store,
                                                       transcription: svc,
@@ -1121,6 +1126,8 @@ struct MilaApp: App {
                 .task { await runFinalizeRegressionIfRequested() }
                 .task { recordingSummarizer.backfillIfNeeded() }
                 .task { voiceMemosImporter.start() }
+                .task { sharedFolders.start() }
+                .environmentObject(sharedFolders)
                 .environmentObject(recordingSummarizer)
                 .environmentObject(meetingDetectionSettings)
                 .environmentObject(voiceMemosSettings)
@@ -2459,6 +2466,9 @@ final class MilaAppDelegate: NSObject, NSApplicationDelegate {
     weak var shareImporter: RecordingShareImporter?
 
     private var didShutDown = false
+    /// `gracefulShutdown` has returned: everything that holds Metal memory
+    /// is freed, so exiting is safe.
+    private var shutdownFinished = false
     private var screenLockObserversInstalled = false
     /// `.milaconfig` / `.milashare` URLs delivered by a cold launch
     /// (double-click while Mila was not running) before `wireDelegate()`
@@ -2519,10 +2529,18 @@ final class MilaAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if didShutDown { return .terminateNow }
+        if shutdownFinished { return .terminateNow }
+        // A second Quit while `gracefulShutdown` is still waiting — on a
+        // multi-GB model load it can take seconds, so ⌘Q again or a script's
+        // repeated `quit` is likely. Answering `.terminateNow` here exited
+        // with that load still holding Metal resources, and ggml aborted in
+        // `ggml_metal_rsets_free` (Mila-2026-11-09-144438.ips). Refuse this
+        // one; the first request's reply below ends the app.
+        if didShutDown { return .terminateCancel }
         didShutDown = true
         Task { @MainActor [weak self] in
             await self?.gracefulShutdown()
+            self?.shutdownFinished = true
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

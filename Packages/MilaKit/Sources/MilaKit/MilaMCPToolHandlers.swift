@@ -753,6 +753,24 @@ public struct MilaMCPToolHandlers: Sendable {
         // Lets a client tell "the user chose to transcribe this later" from a
         // genuine `failed` without fetching the transcript.
         if recording.isTranscriptionDeferred { obj["transcription_stopped"] = true }
+        // Who was invited (from the user's calendar), as opposed to
+        // `speakers` — who the diarizer heard. Often the only names a
+        // recording has when diarization is off.
+        if let event = recording.calendarEvent {
+            var calendar: [String: Any] = [
+                "title": event.title,
+                "start": iso(event.start),
+                "end": iso(event.end),
+                "attendees": event.attendees.map { a -> [String: Any] in
+                    var o: [String: Any] = [:]
+                    if let name = a.name { o["name"] = name }
+                    if let email = a.email { o["email"] = email }
+                    return o
+                },
+            ]
+            if let series = event.seriesID { calendar["series_id"] = series }
+            obj["calendar_event"] = calendar
+        }
         return obj
     }
 

@@ -193,6 +193,7 @@ targets:
         NSScreenCaptureUsageDescription: "Mila needs screen recording permission to capture audio from apps like Zoom."
         NSAppleEventsUsageDescription: "Mila uses AppleEvents to paste dictated text into the active app."
         NSSpeechRecognitionUsageDescription: "Mila transcribes locally on your Mac; no audio is sent to the cloud."
+        NSCalendarsFullAccessUsageDescription: "Mila names your recordings after the calendar event they were made during and saves who was invited. Your calendar is read on this Mac only."
         NSPrincipalClass: NSApplication
         LSUIElement: false
         # Custom UTI used by the in-app drag-and-drop payload that moves a
@@ -259,6 +260,8 @@ targets:
         com.apple.security.device.microphone: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.network.client: true
+        # Hardened runtime refuses EventKit without it (calendar naming).
+        com.apple.security.personal-information.calendars: true
         com.apple.security.cs.allow-jit: true
         com.apple.security.cs.disable-library-validation: true
     dependencies:

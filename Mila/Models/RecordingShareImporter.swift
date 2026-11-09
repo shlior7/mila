@@ -243,6 +243,34 @@ final class RecordingShareImporter: ObservableObject {
             isStaging = false
             pumpQueue()
         }
+        do {
+            let prepared = try await prepare(url, withSpeakerProfiles: true)
+            pending = prepared
+            // The bundle's filename is whatever the sender called it — a
+            // meeting title, a client — so it goes `.private`; the id, byte
+            // count and disposition are the diagnostic.
+            log.log("""
+                staged \(url.lastPathComponent, privacy: .private) for import: \
+                recording \(prepared.manifest.recording.id, privacy: .public), \
+                \(prepared.bundleByteCount, privacy: .public) bytes, \
+                \(prepared.isUpdate ? "update" : "add", privacy: .public), \
+                \(prepared.manifest.speakerProfiles?.count ?? 0, privacy: .public) voice profile(s)
+                """)
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            log.error("""
+                failed to stage shared recording: \
+                \(ShareManifest.LoadError.logMessage(for: error), privacy: .public) \
+                (\(String(describing: error), privacy: .private))
+                """)
+        }
+    }
+
+    /// Extract and verify a bundle into a fresh staging directory — every
+    /// check described in the type comment — and say what importing it would
+    /// do. Removes the staging directory itself when it throws; on success
+    /// the caller owns it (`PendingImport.stagingDirectory`).
+    private func prepare(_ url: URL, withSpeakerProfiles: Bool) async throws -> PendingImport {
         // The file may live outside anything the app was granted (a download
         // the user double-clicked). Harmless when no scope is offered.
         let scoped = url.startAccessingSecurityScopedResource()
@@ -345,7 +373,7 @@ final class RecordingShareImporter: ObservableObject {
             }
             let disposition: Disposition = existing.map { .update(existing: $0) } ?? .add
 
-            pending = PendingImport(
+            return PendingImport(
                 manifest: manifest,
                 stagingDirectory: dir,
                 audioURL: audioURL,
@@ -354,26 +382,10 @@ final class RecordingShareImporter: ObservableObject {
                 bundleByteCount: bundleBytes,
                 disposition: disposition,
                 wouldExceedStorageCap: capExceeded(incoming: manifest.audio.byteCount, replacing: existing) != nil,
-                speakerPlan: makeSpeakerPlan(for: manifest))
-
-            // The bundle's filename is whatever the sender called it — a
-            // meeting title, a client — so it goes `.private`; the id, byte
-            // count and disposition are the diagnostic.
-            log.log("""
-                staged \(url.lastPathComponent, privacy: .private) for import: \
-                recording \(manifest.recording.id, privacy: .public), \
-                \(bundleBytes, privacy: .public) bytes, \
-                \(existing == nil ? "add" : "update", privacy: .public), \
-                \(manifest.speakerProfiles?.count ?? 0, privacy: .public) voice profile(s)
-                """)
+                speakerPlan: withSpeakerProfiles ? makeSpeakerPlan(for: manifest) : .empty)
         } catch {
             if let staging { try? fileManager.removeItem(at: staging) }
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            log.error("""
-                failed to stage shared recording: \
-                \(ShareManifest.LoadError.logMessage(for: error), privacy: .public) \
-                (\(String(describing: error), privacy: .private))
-                """)
+            throw error
         }
     }
 
@@ -697,6 +709,71 @@ final class RecordingShareImporter: ObservableObject {
             let id = recording.id
             Task { await store.compressRecordingAudio(id: id) }
         }
+    }
+
+    // MARK: - Shared folders
+
+    /// Import a teammate's bundle from a shared folder (`SharedFolderSync`)
+    /// with no sheet: linking the folder was the user's consent. Same checks
+    /// as an interactive import — `prepare` verifies the bundle the same way —
+    /// minus voice profiles, which only the sheet's per-speaker review may
+    /// write. Throws rather than raising `errorMessage`: a sync pass runs
+    /// unattended, so its failures are logged and retried, not alerted.
+    ///
+    /// Mirrors `confirm()`'s library write without its cancellation checks:
+    /// there is no sheet to cancel. A local copy keeps its own folder.
+    @discardableResult
+    func importAutomatically(_ url: URL, folder: String) async throws -> UUID {
+        let prepared = try await prepare(url, withSpeakerProfiles: false)
+        defer { try? fileManager.removeItem(at: prepared.stagingDirectory) }
+        let manifest = prepared.manifest
+
+        var existing = store.recordings.first { $0.id == manifest.recording.id }
+        if let message = capExceeded(incoming: manifest.audio.byteCount, replacing: existing) {
+            throw ImportError.storageCap(message)
+        }
+        if let existing, isRecordingBusy(existing.id) { throw ImportError.recordingBusy }
+
+        let destination = freshDestination(title: manifest.recording.title,
+                                           extension: manifest.audio.format)
+        let partial = destination.appendingPathExtension(Self.partialSuffix)
+        do {
+            try await copyAudio(prepared.audioURL, partial)
+            // The copy is an `await`; resolve the local copy again as `confirm()` does.
+            existing = store.recordings.first { $0.id == manifest.recording.id }
+            if let existing, isRecordingBusy(existing.id) { throw ImportError.recordingBusy }
+            try fileManager.moveItem(at: partial, to: destination)
+        } catch {
+            try? fileManager.removeItem(at: partial)
+            throw error
+        }
+
+        let recording = manifest.recording.makeRecording(
+            audioFileName: destination.lastPathComponent,
+            fullText: prepared.transcriptText,
+            sharedBy: manifest.exportedBy.name,
+            sharedAt: manifest.exportedAt,
+            folder: existing?.folder ?? folder)
+        if case .notSaved = store.upsertImported(recording) {
+            try? fileManager.removeItem(at: destination)
+            throw ImportError.saveFailed
+        }
+        if let existing, existing.audioFileName != recording.audioFileName {
+            for url in [store.audioURL(for: existing), store.transcriptURL(for: existing),
+                        store.summaryURL(for: existing), store.subtitleURL(for: existing)] {
+                try? fileManager.removeItem(at: url)
+            }
+        }
+        TranscriptExporter.writeSRT(for: recording, in: store.recordingsDirectory)
+        log.log("""
+            imported \(recording.id, privacy: .public) from a shared folder \
+            (\(existing == nil ? "added" : "replaced", privacy: .public))
+            """)
+        if compressImportedWAV, manifest.audio.format == "wav" {
+            let id = recording.id
+            Task { await store.compressRecordingAudio(id: id) }
+        }
+        return recording.id
     }
 
     private func finish(_ pending: PendingImport, error: Error?) {
