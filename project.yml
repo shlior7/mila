@@ -260,6 +260,8 @@ targets:
         com.apple.security.device.microphone: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.network.client: true
+        # Hardened runtime refuses EventKit without it (calendar naming).
+        com.apple.security.personal-information.calendars: true
         com.apple.security.cs.allow-jit: true
         com.apple.security.cs.disable-library-validation: true
     dependencies:
