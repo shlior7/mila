@@ -5,6 +5,21 @@ import TranscriptionCore
 private let remoteLog = Logger(subsystem: "io.island.whisper.IslandWhisper",
                                category: "RemoteWhisperEngine")
 
+/// Immutable snapshot handed to `RemoteWhisperEngine` for one transcription.
+/// `Sendable` so it can cross from the `@MainActor` settings object to the
+/// engine actor without a data race. Lives here, not with the Mac's
+/// settings, so the iPad target can compile the engine on its own.
+struct RemoteTranscriptionConfig: Sendable, Equatable {
+    /// Base URL, e.g. `https://api.openai.com/v1`. The engine appends
+    /// `audio/transcriptions`.
+    var endpoint: URL
+    /// Bearer token. Empty for self-hosted servers that don't authenticate.
+    var apiKey: String
+    /// Model identifier the server expects, e.g. `whisper-1` (OpenAI) or
+    /// `ivrit-ai/whisper-large-v3-turbo-ct2` (a self-hosted faster-whisper).
+    var model: String
+}
+
 /// Injection seam for `TranscriptionService`: the remote engine refines
 /// `TranscribingEngine` with the remote-specific `configure(_:)` step the
 /// service calls before each run. Pulling it behind a protocol lets tests

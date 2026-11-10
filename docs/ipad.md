@@ -28,12 +28,20 @@ recordings stay; only the app's signature lapses.
 
 ## Models
 
-Settings → Model downloads one from HuggingFace, SHA-256 pinned
-(`PadModels.swift`):
+Settings → Model downloads one, SHA-256 pinned (`PadModels.swift`):
 
-- **Whisper large-v3-turbo q5** (574 MB) — default; English and Hebrew.
-- **ivrit.ai large-v3-turbo** (1.6 GB) — best Hebrew, but tight on a 4 GB
-  iPad; if Mila quits mid-transcription, go back to the q5 model.
+- **ivrit.ai large-v3-turbo q5** (574 MB) — default; best Hebrew. ivrit.ai
+  publishes only the 1.6 GB f16 file, so this one is quantized with
+  whisper.cpp's `whisper-quantize … q5_0` and hosted on the fork's
+  `models-ivrit-turbo-q5` release.
+- **Whisper large-v3-turbo q5** (574 MB) — OpenAI's turbo; English.
+- **ivrit.ai large-v3-turbo, full** (1.6 GB) — tight on a 4 GB iPad; if
+  Mila quits mid-transcription, go back to the q5 one.
+
+Or Settings → Model → **Remote server**: transcribe on an OpenAI-compatible
+server instead, through the Mac's own `RemoteWhisperEngine`. The URL and
+model live in UserDefaults, the API key in the Keychain. `server/modal/`
+runs one on a Modal GPU for a few cents an hour of audio.
 
 Keep Mila open while it transcribes — iOS stops GPU work in the background.
 Recording itself keeps going with the screen locked.

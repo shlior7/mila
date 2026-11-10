@@ -329,8 +329,13 @@ targets:
       - path: MilaPad
         excludes:
           - "Info.plist"
-      # Portable AVFoundation helpers shared with the Mac app.
+      # Portable helpers shared with the Mac app: AVFoundation audio, and
+      # the OpenAI-compatible remote engine (plus what it needs).
       - path: Mila/Audio/AudioUtilities.swift
+      - path: Mila/Audio/AudioCompressor.swift
+      - path: Mila/Transcription/RemoteWhisperEngine.swift
+      - path: Mila/Transcription/SpeakerLabel.swift
+      - path: Mila/Models/KeychainHelper.swift
     dependencies:
       - package: TranscriptionCore
         product: TranscriptionCore

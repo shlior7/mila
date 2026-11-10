@@ -187,11 +187,18 @@ final class PadLibrary: ObservableObject {
 
     // MARK: - Transcription
 
-    /// Transcribe an own recording with the selected model. One at a time;
-    /// the screen is kept awake because iOS suspends GPU work in the background.
+    /// Transcribe an own recording with the selected model, or on the remote
+    /// server when that is on. One at a time; the screen is kept awake
+    /// because iOS suspends GPU work (and soon networking) in the background.
     func transcribe(_ id: UUID) async {
         guard transcribingID == nil, var item = items.first(where: { $0.id == id }), item.isMine else { return }
-        guard let modelURL = models.selectedURL, let model = models.selected else {
+        let remote = models.remoteConfig
+        if models.useRemote && remote == nil {
+            lastError = "Enter the server's URL in Settings, or turn Remote server off."
+            return
+        }
+        let local = models.selectedURL.flatMap { url in models.selected.map { (url, $0) } }
+        guard remote != nil || local != nil else {
             lastError = "Download a model in Settings, then tap Transcribe."
             return
         }
@@ -202,22 +209,33 @@ final class PadLibrary: ObservableObject {
             transcribingID = nil
             UIApplication.shared.isIdleTimerDisabled = false
         }
+        let engine: any TranscribingEngine
+        let modelName: String
+        if let remote {
+            let remoteEngine = RemoteWhisperEngine()
+            await remoteEngine.configure(remote)
+            engine = remoteEngine
+            modelName = remote.model
+        } else {
+            engine = self.engine
+            modelName = local!.1.name
+        }
         do {
             let audio = audioURL(for: item)
             let samples = try await Task.detached(priority: .userInitiated) {
                 try PadAudio.whisperSamples(of: audio)
             }.value
-            try await engine.loadIfNeeded(modelURL: modelURL, displayName: model.displayName)
+            try await engine.loadIfNeeded(modelURL: local?.0 ?? audio, displayName: modelName)
             let segments = try await engine.transcribe(
                 samples: samples, language: item.recording.language, audioCtx: 0,
-                progress: { [weak self] p in Task { @MainActor in self?.progress = p } })
+                progress: { [weak self] p in Task { @MainActor in self?.progress = p } }, isCancelled: nil)
             // Release the model: an idle 0.5–1.6 GB in memory is what gets a
             // backgrounded, recording app killed.
             await engine.shutdown()
             item.recording.segments = segments.map {
                 ShareBundle.Segment(start: $0.start, end: $0.end, text: $0.text, speaker: $0.speaker)
             }
-            item.recording.modelName = model.name
+            item.recording.modelName = modelName
             item.transcribed = true
             save(item)
             onChange?()

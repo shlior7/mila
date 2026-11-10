@@ -26,13 +26,25 @@ struct PadModel: Identifiable, Hashable {
 
     static let ivritTurbo = PadModel(
         name: "ivrit-ai-whisper-large-v3-turbo",
-        displayName: "ivrit.ai large-v3-turbo (Hebrew)",
-        note: "Best Hebrew. 1.6 GB; may run out of memory on a 4 GB iPad.",
+        displayName: "ivrit.ai large-v3-turbo (Hebrew, full)",
+        note: "1.6 GB; may run out of memory on a 4 GB iPad.",
         url: URL(string: "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/main/ggml-model.bin")!,
         sizeBytes: 1_624_555_275,
         sha256: "c8090411113357097bfafc2b8e228ec1639fa7f5fe4ecb5d054ac0ccef8641b1")
 
-    static let all: [PadModel] = [.turboQ5, .ivritTurbo]
+    /// `ivritTurbo` quantized with whisper.cpp v1.8.4's
+    /// `whisper-quantize ggml-model.bin out.bin q5_0` (ivrit.ai publishes
+    /// only f16). Same words as the f16 model on the Hebrew fixtures in
+    /// TranscriptionCore. Hosted on the fork's `models-ivrit-turbo-q5` release.
+    static let ivritTurboQ5 = PadModel(
+        name: "ivrit-ai-whisper-large-v3-turbo-q5_0",
+        displayName: "ivrit.ai large-v3-turbo (Hebrew)",
+        note: "Best Hebrew. 574 MB.",
+        url: URL(string: "https://github.com/shlior7/mila/releases/download/models-ivrit-turbo-q5/ggml-ivrit-large-v3-turbo-q5_0.bin")!,
+        sizeBytes: 574_041_195,
+        sha256: "6c1da92e8e41dd64b8cc402eee7eb7a433d2152567e1a4d9cf181fefcc67a572")
+
+    static let all: [PadModel] = [.ivritTurboQ5, .turboQ5, .ivritTurbo]
 }
 
 @MainActor
@@ -44,19 +56,50 @@ final class PadModels: ObservableObject {
         didSet { UserDefaults.standard.set(selectedName, forKey: "model.selected") }
     }
 
+    /// Transcribe on an OpenAI-compatible server (`server/modal/`) instead
+    /// of on the iPad. Off by default: audio leaves the device.
+    @Published var useRemote: Bool {
+        didSet { UserDefaults.standard.set(useRemote, forKey: "remote.enabled") }
+    }
+    /// Base URL ending in `/v1`; the engine appends `audio/transcriptions`.
+    @Published var remoteEndpoint: String {
+        didSet { UserDefaults.standard.set(remoteEndpoint, forKey: "remote.endpoint") }
+    }
+    @Published var remoteModel: String {
+        didSet { UserDefaults.standard.set(remoteModel, forKey: "remote.model") }
+    }
+    /// In the Keychain, not UserDefaults.
+    @Published var remoteAPIKey: String {
+        didSet { KeychainHelper.save(key: "remote.apiKey", value: remoteAPIKey) }
+    }
+
     let directory: URL
     private var observations: [String: NSKeyValueObservation] = [:]
 
     init() {
         directory = URL.applicationSupportDirectory.appendingPathComponent("Models", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        selectedName = UserDefaults.standard.string(forKey: "model.selected") ?? PadModel.turboQ5.name
+        let d = UserDefaults.standard
+        selectedName = d.string(forKey: "model.selected") ?? PadModel.ivritTurboQ5.name
+        useRemote = d.bool(forKey: "remote.enabled")
+        remoteEndpoint = d.string(forKey: "remote.endpoint") ?? ""
+        remoteModel = d.string(forKey: "remote.model") ?? "ivrit-ai/whisper-large-v3-turbo-ct2"
+        remoteAPIKey = KeychainHelper.load(key: "remote.apiKey") ?? ""
         installed = Set(PadModel.all.map(\.name).filter {
             FileManager.default.fileExists(atPath: fileURL(for: $0).path)
         })
     }
 
     var selected: PadModel? { PadModel.all.first { $0.name == selectedName } }
+
+    /// The server to use, when remote is on and its URL parses.
+    var remoteConfig: RemoteTranscriptionConfig? {
+        let trimmed = remoteEndpoint.trimmingCharacters(in: .whitespaces)
+        guard useRemote, let url = URL(string: trimmed), url.scheme == "https" || url.scheme == "http",
+              url.host != nil else { return nil }
+        return RemoteTranscriptionConfig(endpoint: url, apiKey: remoteAPIKey,
+                                         model: remoteModel.trimmingCharacters(in: .whitespaces))
+    }
 
     /// The selected model's file, when it is downloaded.
     var selectedURL: URL? {

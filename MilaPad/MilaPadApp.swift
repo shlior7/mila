@@ -212,11 +212,25 @@ struct SettingsView: View {
                     }
                 }
                 Section {
-                    ForEach(PadModel.all) { model in
-                        modelRow(model)
+                    Picker("Transcribe on", selection: $models.useRemote) {
+                        Text("This iPad").tag(false)
+                        Text("Remote server").tag(true)
+                    }
+                    if models.useRemote {
+                        TextField("https://…/v1", text: $models.remoteEndpoint)
+                            .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        SecureField("API key", text: $models.remoteAPIKey)
+                        TextField("Model", text: $models.remoteModel)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    } else {
+                        ForEach(PadModel.all) { model in
+                            modelRow(model)
+                        }
                     }
                 } header: { Text("Model") } footer: {
-                    Text("Models run on this iPad. Keep Mila open while it transcribes.")
+                    Text(models.useRemote
+                         ? "Audio is uploaded to this server. See server/modal/README.md to run your own."
+                         : "Models run on this iPad. Keep Mila open while it transcribes.")
                 }
                 Section {
                     LabeledContent("Folder", value: sync.folderName ?? "Not linked")
