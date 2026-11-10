@@ -17,12 +17,12 @@ let strictConcurrency: [SwiftSetting] = [
 
 let package = Package(
     name: "MilaKit",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "MilaKit", targets: ["MilaKit"]),
     ],
     targets: [
-        .target(name: "MilaKit", swiftSettings: strictConcurrency),
+        .target(name: "MilaKit", swiftSettings: strictConcurrency, linkerSettings: [.linkedLibrary("z")]),
         .testTarget(
             name: "MilaKitTests",
             dependencies: ["MilaKit"],

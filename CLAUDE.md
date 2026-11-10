@@ -17,6 +17,7 @@ A macOS (Swift/SwiftUI) local transcription app built on whisper.cpp, with optio
   - `Packages/TranscriptionCore/` — cross-platform Swift package: WhisperEngine (whisper.cpp bindings), WAVReader, WER calculator, and E2E transcription test fixtures
   - `Packages/MilaKit/` — zero-dependency Swift package shared by the app and the `mila-mcp` helper: TranscriptFormatter, the read-only `StoredRecording` mirror of recordings.json, `MilaStoreReader`, the live-transcript snapshot schema, and the MCP tool handlers
   - `MilaMCP/` — the `mila-mcp` executable (MCP stdio server over Mila's transcriptions), embedded at `Mila.app/Contents/MacOS/mila-mcp`; see `docs/mcp.md`
+  - `MilaPad/` — the iPad app (record, on-device transcription, sync with the Mac through a shared iCloud Drive folder of `.milashare` bundles); see `docs/ipad.md`. Reads and writes bundles via MilaKit's `ShareBundle`/`ShareZip`, never the Mac's `ShareManifest` — `ShareBundleCompatibilityTests` pins that the two agree
   - `scripts/` — release/build scripts (make-dmg.sh, etc.)
   - `site/` — the public one-pager, published into the `gh-pages` branch next to the Sparkle `appcast.xml` by `.github/workflows/pages.yml`. Never switch the Pages source to "GitHub Actions": pushes to `gh-pages` would stop being served and the update feed would freeze. See `docs/website.md`
 

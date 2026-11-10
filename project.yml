@@ -317,6 +317,37 @@ targets:
         # dead-strip, so check the shipped size before drawing conclusions
         # from the Debug number.
 
+  # The iPad app (docs/ipad.md): record, transcribe on-device, and sync
+  # with the Mac through a shared iCloud Drive folder of .milashare bundles.
+  # Signed with your own team: `MILA_PAD_TEAM=<team id> xcodegen generate`
+  # (a free Apple ID works — Xcode → Settings → Accounts shows its id).
+  MilaPad:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: MilaPad
+        excludes:
+          - "Info.plist"
+      # Portable AVFoundation helpers shared with the Mac app.
+      - path: Mila/Audio/AudioUtilities.swift
+    dependencies:
+      - package: TranscriptionCore
+        product: TranscriptionCore
+      - package: MilaKit
+        product: MilaKit
+    settings:
+      base:
+        INFOPLIST_FILE: MilaPad/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.shlior7.MilaPad
+        PRODUCT_NAME: Mila
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "${MILA_PAD_TEAM}"
+        ENABLE_HARDENED_RUNTIME: NO
+        OTHER_LDFLAGS: "$(inherited) -framework Accelerate -framework Metal -framework MetalKit"
+
   MilaTests:
     type: bundle.unit-test
     platform: macOS

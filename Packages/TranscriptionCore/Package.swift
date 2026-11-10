@@ -16,7 +16,7 @@ let whisperDep: Target = .binaryTarget(
 
 let package = Package(
     name: "TranscriptionCore",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "TranscriptionCore", targets: ["TranscriptionCore"]),
         .executable(name: "whisper-e2e", targets: ["WhisperE2E"]),
