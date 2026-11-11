@@ -24,6 +24,7 @@ image = (
     # Baked into the image, so a cold start doesn't download 1.6 GB.
     .run_function(download_model)
     .add_local_file(Path(__file__).with_name("api.py"), "/root/api.py")
+    .add_local_file(Path(__file__).with_name("web.html"), "/root/web.html")
 )
 
 app = modal.App("mila-transcribe", image=image)
@@ -35,7 +36,9 @@ app = modal.App("mila-transcribe", image=image)
     # last request rather than keeping a GPU warm.
     scaledown_window=120,
     timeout=60 * 60,
-    secrets=[modal.Secret.from_name("mila-transcribe")],
+    # mila-transcribe: MILA_API_KEY (the apps). mila-web-users:
+    # MILA_WEB_USERS, {"name": "<hash>"} (the web page).
+    secrets=[modal.Secret.from_name("mila-transcribe"), modal.Secret.from_name("mila-web-users")],
 )
 class Server:
     @modal.enter()
@@ -46,9 +49,10 @@ class Server:
 
     @modal.asgi_app()
     def web(self):
+        import json
         import os
 
         from api import build_app
 
-        # KeyError, not an open server, if the secret lacks the key.
-        return build_app(self.model, os.environ["MILA_API_KEY"])
+        # KeyError, not an open server, if a secret lacks its key.
+        return build_app(self.model, os.environ["MILA_API_KEY"], json.loads(os.environ["MILA_WEB_USERS"]))
