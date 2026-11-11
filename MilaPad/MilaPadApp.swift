@@ -229,7 +229,7 @@ struct SettingsView: View {
                     }
                 } header: { Text("Model") } footer: {
                     Text(models.useRemote
-                         ? "Audio is uploaded to this server. See server/modal/README.md to run your own."
+                         ? "Audio is uploaded to this server. Any OpenAI-compatible /v1/audio/transcriptions server works; docs/REMOTE_TRANSCRIPTION_SERVER.md shows how to run one."
                          : "Models run on this iPad. Keep Mila open while it transcribes.")
                 }
                 Section {

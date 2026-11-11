@@ -40,8 +40,8 @@ Settings → Model downloads one, SHA-256 pinned (`PadModels.swift`):
 
 Or Settings → Model → **Remote server**: transcribe on an OpenAI-compatible
 server instead, through the Mac's own `RemoteWhisperEngine`. The URL and
-model live in UserDefaults, the API key in the Keychain. `server/modal/`
-runs one on a Modal GPU for a few cents an hour of audio.
+model live in UserDefaults, the API key in the Keychain.
+`docs/REMOTE_TRANSCRIPTION_SERVER.md` shows how to run such a server.
 
 Keep Mila open while it transcribes — iOS stops GPU work in the background.
 Recording itself keeps going with the screen locked.

@@ -56,7 +56,7 @@ final class PadModels: ObservableObject {
         didSet { UserDefaults.standard.set(selectedName, forKey: "model.selected") }
     }
 
-    /// Transcribe on an OpenAI-compatible server (`server/modal/`) instead
+    /// Transcribe on an OpenAI-compatible server (docs/REMOTE_TRANSCRIPTION_SERVER.md) instead
     /// of on the iPad. Off by default: audio leaves the device.
     @Published var useRemote: Bool {
         didSet { UserDefaults.standard.set(useRemote, forKey: "remote.enabled") }
