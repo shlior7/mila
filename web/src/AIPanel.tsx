@@ -26,14 +26,19 @@ export default function AIPanel({ recording, onSaved, onError, onSeek }: Props) 
     setKind(what);
     setStreaming("");
     abort.current = new AbortController();
+    let fields: Partial<Recording>;
     try {
-      const reply = await streamReply({ settings, recording, messages, onText: setStreaming, signal: abort.current.signal });
-      onSaved(await api.patch(recording.id, save(reply)));
+      fields = save(await streamReply({ settings, recording, messages, onText: setStreaming, signal: abort.current.signal }));
     } catch (err) {
       if ((err as Error).name !== "AbortError") setError((err as Error).message);
-    } finally {
       setStreaming(null);
+      return;
     }
+    // Show the reply now and save behind it, so the next question isn't
+    // blocked on the round trip to the server.
+    onSaved({ ...recording, ...fields });
+    setStreaming(null);
+    try { onSaved(await api.patch(recording.id, fields)); } catch (err) { onError(err); }
   };
 
   const analyze = () => run("analysis", [{ role: "user", content: ANALYZE_PROMPT }], (markdown) => ({
